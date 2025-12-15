@@ -1,0 +1,218 @@
+#!/bin/bash
+#
+# file: dlp-yt_sh
+# written by Dee 2020
+# latest update 2025 Dec
+# downloader script for audio/video from YouTube
+# which passes instructions to yt-dlp
+# Saves files to specified download path
+
+# Color settings using ANSI escape codes
+declare -A colors=(
+  ["bold"]="\e[1m"
+  ["yellow"]="\e[0;33m\e[1m"
+  ["blue"]="\e[0;94m"
+  ["red"]="\e[0;91m"
+  ["white"]="\e[0;97m"
+  ["reset"]="\e[0m"
+)
+
+# Configuration
+dlpath="$HOME/Downloads-yt/"
+local_list="$HOME/Documents/yt-dl-lists/yt-dl_local_list"
+audioformat="mp3"
+audiodetails_constant="-x --audio-format $audioformat --audio-quality 0 --embed-thumbnail"
+batchdetails_constant="--batch-file $local_list"
+batchdetails=""
+keepvideo_constant="--keep-video"
+videodetails_constant="-f bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b"
+playlistdl="--no-playlist" # must be '' to dl playlists
+outputdetails_constant="${dlpath}%(title)s.%(ext)s"
+outputdetails="-o $outputdetails_constant"
+keepvideo=""
+videodetails=""
+audiodetails=""
+
+# Validate download path
+[[ ! -d "${dlpath/#\~/$HOME}" ]] && mkdir -p "${dlpath/#\~/$HOME}"
+
+# Print colored text
+print_colored() {
+  local color="${colors[$1]:-${colors[reset]}}"
+  echo -ne "${color}$2${colors[reset]}"
+}
+
+print_help() {
+  print_colored "blue" "Available commands:\n"
+  echo -e "\t'A' - Change download format to Audio"
+  echo -e "\t'V' - Change download format to Video"
+  echo -e "\t'B' - Download both Audio and Video"
+  echo -e "\t'F' - Fetch from list"
+  echo -e "\t'L' - Show current list"
+  echo -e "\t'P' - Download playlist if URL contains"
+  echo -e "\t'O' - list current parameters (options)"
+  echo -e "\t'H' - Show this help"
+  echo -e "\t'ENTER' - Quit"
+}
+
+print_list() {
+  more "$local_list"
+}
+
+list_parameters() {
+  if [[ $url == *"&list="* && "$playlistdl" != "--no-playlist" ]]; then
+    print_colored "white" "$playlistdl !!"
+  fi
+  print_colored "yellow" "$outputdetails\n"
+  if [[ $filetype == "video" ]]; then
+    print_colored "yellow" "Downloading VIDEO ONLY...\n"
+    print_colored "yellow" "$videodetails\n"
+  elif [[ $filetype == "both" ]]; then
+    print_colored "yellow" "Downloading Audio AND Video.\n"
+    print_colored "yellow" "$videodetails\n"
+    print_colored "yellow" "$audiodetails\n"
+    print_colored "yellow" "$keepvideo\n"
+  elif [[ $filetype == "audio" ]]; then
+    print_colored "yellow" "Downloading Audio only.\n"
+    audiodetails=$audiodetails_constant
+    print_colored "yellow" "$audiodetails\n"
+  fi
+  if [[ $batchdetails != "" ]]; then
+    print_colored "yellow" "Downloading local list.\n"
+    print_colored "yellow" "$batchdetails\n"
+  fi
+}
+# Download functions
+fetch_url() {
+  print_colored "yellow" "Downloaded file with these parameters:\n"
+  list_parameters
+  print_colored "white" "$url\n"
+
+  yt-dlp $videodetails $audiodetails $keepvideo \
+    $outputdetails "$url" $playlistdl
+  print_colored "yellow" "Downloaded file with these parameters:\n"
+  list_parameters
+
+}
+
+fetch_local_list() {
+  # Check if file doesn't exist OR is empty
+  if [[ ! -s "$local_list" ]]; then
+    print_colored "yellow" "no local list found, or file is empty.\aborting."
+  else
+    print_colored "yellow" "Fetching local list of: \n"
+    print_list
+    print_colored "yellow" "with these parameters\n"
+    list_parameters
+    yt-dlp -w $audiodetails $videodetails $keepvideo $outputdetails $batchdetails
+  fi
+}
+
+process_url() {
+  url="$1"
+  if [[ "$playlistdl" == "--no-playlist" && $url == *"&list="* ]]; then
+    echo "Trimming url as we do not want a list."
+    url="${url%%&list=*}"
+  elif [[ $url == *"&list="* ]]; then
+    print_colored "white" "Playlist link detected! "
+  fi
+  print_playlist_status
+  fetch_url
+}
+
+set_audio() {
+  filetype="audio"
+  audiodetails="-x --audio-format $audioformat --embed-thumbnail"
+  keepvideo=""
+}
+
+set_video() {
+  filetype="video"
+  videodetails=$videodetails_constant
+  keepvideo=""
+}
+
+set_both() {
+  filetype="both"
+  videodetails=$videodetails_constant
+  audiodetails=$audiodetails_constant
+  keepvideo=$keepvideo_constant
+}
+
+print_playlist_status() {
+  if [[ "$playlistdl" = "--no-playlist" ]]; then
+    echo "We are not fetching playlists"
+  else
+    print_colored "red" "We ARE fetching PLAYLISTS\n"
+  fi
+}
+
+print_menu() {
+  echo
+  echo "Enter a YouTube URL or "
+  print_colored "yellow" "(H)"
+  print_colored "blue" "elp "
+  echo "to list commands:"
+  print_playlist_status
+  print_colored "blue" "Current format: "
+  print_colored "yellow" "$filetype\n"
+  read -e -p "> " USERENTRY
+}
+
+# Main execution block
+print_colored "blue" "YouTube Downloader\n"
+print_colored "yellow" "$0"
+echo -en " script which calls "
+print_colored "yellow" "yt-dlp\n"
+[[ $# -gt 0 ]] && {
+  print_help
+  exit 0
+}
+set_both
+
+while true; do
+  print_menu
+
+  [[ -z "$USERENTRY" ]] && {
+    print_colored "red" "Exiting..."
+    echo "$0 (yt-dlp)"
+    break
+  }
+
+  case "${USERENTRY,,}" in
+  "h") print_help ;;
+  "f")
+    $batchdetails=$batchdetails_constant
+    fetch_local_list
+    $batchdetails=""
+    ;;
+  "l") print_list ;;
+  "p") if [[ "$playlistdl" == "--no-playlist" ]]; then
+    playlistdl=""
+  else
+    playlistdl="--no-playlist"
+  fi ;;
+  "a")
+    set_audio
+    ;;
+  "v")
+    set_video
+    ;;
+  "b")
+    set_both
+    ;;
+  *)
+    if [[ $USERENTRY == http* ]]; then
+      if [[ $url == *"&list="* && "$playlistdl" != "--no-playlist" ]]; then
+        print_colored "white" "Downloading playlist!!"
+      elif [[ $url == *"&list="* ]]; then
+        echo "Trimming url as we do not want a list."
+        url="${url%%&list=*}"
+      fi
+      process_url "$USERENTRY"
+    else
+      print_colored "red" "Invalid input. Press 'H' for help.\n"
+    fi
+    ;;
+  esac
+done
