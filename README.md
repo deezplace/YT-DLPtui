@@ -1,10 +1,8 @@
 dlp-yt_sh
 written by Dee 2020
 
-downloader script, terminal user interface
-for audio/video from YouTube
-which passes instructions to yt-dlp
-Saves files to specified download path
+TUI downloader script for using yt-dlp 
+to DL audio/video from YouTube
 
 All care, no responsibility
 
